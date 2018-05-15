@@ -5,6 +5,7 @@
   <title>Hello World</title>
 </head>
   <script src="/lib/pixi.min.js"></script>
+  <script src="/lib/tink.js"></script>
   <style>* {padding: 0; margin: 0}</style>
 <body>
   <script type="text/javascript">
@@ -85,12 +86,27 @@
 		return hit;
 	}
   
+	function randomInt(min, max) {
+		return Math.floor(Math.random() * (max - min + 1)) + min
+	}
+  
     let type = "WebGL"
     if(!PIXI.utils.isWebGLSupported()){
       type = "canvas"
     }
 
     PIXI.utils.sayHello(type)
+	
+	//Aliases
+	let Application = PIXI.Application,
+		Container = PIXI.Container,
+		loader = PIXI.loader,
+		resources = PIXI.loader.resources,
+		Graphics = PIXI.Graphics,
+		TextureCache = PIXI.utils.TextureCache,
+		Sprite = PIXI.Sprite,
+		Text = PIXI.Text,
+		TextStyle = PIXI.TextStyle
 	
 	//Create a Pixi Application
 	let app = new PIXI.Application({
@@ -110,155 +126,90 @@
 	//Add the canvas that Pixi automatically created for you to the HTML document
 	document.body.appendChild(app.view)
 	
-	//Aliases
-	let Application = PIXI.Application,
-		loader = PIXI.loader,
-		resources = PIXI.loader.resources,
-		Sprite = PIXI.Sprite
+	//Tink
+	let tink = new Tink(PIXI, app.renderer.view)
+	
+	//Container
 	const animals = new PIXI.Container()
 	app.stage.addChild(animals)
 
 	//load an image and run the `setup` function when it's done
 	loader
-	  .add("catImage", "images/cat.png")
+	  .add("images/treasureHunter.json")
 	  .load(setup)
 
-	let cat, box, message, state
+	let pointer, state, explorer, treasure, blobs, chimes, exit, player, dungeon,
+		door, healthBar, message, gameScene, gameOverScene, enemies, id
 	
-	//This `setup` function will run when the image has loaded
 	function setup() {
-		//Create the cat sprite
-		cat = new Sprite(loader.resources.catImage.texture)
-		//Add the cat to the stage
-		animals.addChild(cat)
+		//Tink pointer
+		pointer = tink.makePointer()
+		pointer.press = () => {
+			console.log(pointer.x)
+			console.log(pointer.y)
+		}
+		//pointer.release = () => console.log("The pointer was released")
+		//pointer.tap = () => console.log("The pointer was tapped")
+		pointer.visible = true
 
-		cat.position.set(100, 100)
-		//cat.width = 80
-		//cat.height = 120
-		//cat.scale.set(2, 2)
-		//cat.anchor.set(0.5, 0.5)
-		//cat.pivot.set(32, 32)
-		//cat.rotation = 0.5
-		cat.vx = 0
-		cat.vy = 0
+		//Make the game scene and add it to the stage
+		gameScene = new Container()
+		app.stage.addChild(gameScene)
 		
-		//Global position
-		console.log(animals.toGlobal(cat.position))
+		//Make the sprites and add them to the 'gameScene'
+		//Create an alias for the texture atlas frame ids
+		id = resources["images/treasureHunter.json"].textures
 		
-		//Create the box
-		box = new PIXI.Graphics()
-		box.beginFill(0xCCFF99)
-		box.drawRect(0, 0, 64, 64)
-		box.endFill()
-		box.x = 200
-		box.y = 200
-		app.stage.addChild(box)
+		//tink make a draggable sprite
+		door = new Sprite(id["door.png"])
+		door.position.set(32, 0)
+		gameScene.addChild(door)
 		
-		//Create the text sprite
-		let style = new PIXI.TextStyle({
-			fontFamily: "Arial",
-			fontSize: 36,
-			fill: "white",
-			stroke: '#ff3300',
-			strokeThickness: 4,
-			dropShadow: true,
-			dropShadowColor: "#000000",
-			dropShadowBlur: 4,
-			dropShadowAngle: Math.PI / 6,
-			dropShadowDistance: 6,
-		})
-		message = new PIXI.Text("No collision...", style)
-		message.position.set(10, 10)
-		app.stage.addChild(message)
+		//Dungeon
+		dungeon = new Sprite(id["dungeon.png"])
+		gameScene.addChild(dungeon)
 		
-		//Capture the keyboard arrow keys
-		let left = keyboard(37),
-		  up = keyboard(38),
-		  right = keyboard(39),
-		  down = keyboard(40)
-
-		//Left arrow key `press` method
-		left.press = () => {
-			//Change the cat's velocity when the key is pressed
-			cat.vx = -5
-			cat.vy = 0
-		}
-
-		//Left arrow key `release` method
-		left.release = () => {
-			//If the left arrow has been released, and the right arrow isn't down,
-			//and the cat isn't moving vertically:
-			//Stop the cat
-			if (!right.isDown && cat.vy === 0) {
-			  cat.vx = 0;
-			}
-		}
-
-		//Up
-		up.press = () => {
-				cat.vy = -5
-				cat.vx = 0
-			};
-			up.release = () => {
-			if (!down.isDown && cat.vx === 0) {
-			  cat.vy = 0;
-			}
-		}
-
-		//Right
-		right.press = () => {
-				cat.vx = 5
-				cat.vy = 0
-			};
-			right.release = () => {
-			if (!left.isDown && cat.vy === 0) {
-			  cat.vx = 0;
-			}
-		}
-
-		//Down
-		down.press = () => {
-				cat.vy = 5
-				cat.vx = 0
-			};
-			down.release = () => {
-			if (!up.isDown && cat.vx === 0) {
-			  cat.vy = 0;
-			}
-		}
+		//Explorer
+		explorer = new Sprite(id["explorer.png"])
+		explorer.position.set(68, gameScene.height / 2 - explorer.height / 2)
+		explorer.vx = 0
+		explorer.vy = 0
+		gameScene.addChild(explorer)
+		//explorer.draggable = false
+		tink.makeDraggable(explorer)
+		
+		//Treasure
+		treasure = new Sprite(id["treasure.png"])
+		treasure.x = gameScene.width - treasure.width - 48
+		treasure.y = gameScene.height / 2 - treasure.height / 2
+		gameScene.addChild(treasure) 
+		tink.makeDraggable(treasure)
+		
+		//Rectangle
+		let rectangle = new Graphics()
+		rectangle.lineStyle(1, 0x000000, 1)
+		rectangle.beginFill(0xFFFFFF)
+		rectangle.drawRect(0, 0, 64, 64)
+		rectangle.endFill()
+		rectangle.x = 170
+		rectangle.y = 170
+		gameScene.addChild(rectangle)
+		tink.makeDraggable(rectangle)		
 
 		//Set the game state
 		state = play
 
-		//Start the game loop
+		//Start the game loop 
 		app.ticker.add(delta => gameLoop(delta))
 	}
 	
 	function gameLoop(delta){
-	    //Update the current game state:
+		tink.update()
 		state(delta)
 	}
 	
 	function play(delta) {
-		//Move the cat 1 pixel to the right each frame
-		//cat.vx = 1
-		//cat.x += cat.vx
 		
-		cat.x += cat.vx;
-		cat.y += cat.vy
-		
-		//check for a collision between the cat and the box
-		if (hitTestRectangle(cat, box)) {
-			//if there's a collision, change the message text
-			//and tint the box red
-			message.text = "hit!";
-			box.tint = 0xff3300;
-		} else {
-			//if there's no collision, reset the message
-			//text and the box's color
-			message.text = "No collision...";
-			box.tint = 0xccff99;
-		}
 	}
   </script>
 </body>
